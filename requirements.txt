@@ -1,0 +1,5 @@
+Flask==2.3.3
+flask-pymongo==2.3.0
+python-dotenv==1.0.0
+twilio==8.10.0
+pymongo[srv]>=3.11.0
