@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+
+{% block title %}Events{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12 mb-4">
+        <div class="d-flex justify-content-between align-items-center">
+            <h1>Events</h1>
+            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createEventModal">
+                Create Event
+            </button>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    {% for event in events %}
+    <div class="col-md-6 mb-4">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">{{ event.name }}</h5>
+                <span class="badge bg-primary">{{ event.date }}</span>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <strong>Capacity:</strong> {{ event.capacity }}
+                    <div class="progress mt-2">
+                        {% set percentage = (event.invitees|selectattr("status", "equalto", "YES")|list|length / event.capacity * 100)|round %}
+                        <div class="progress-bar" role="progressbar" style="width: {{ percentage }}%">
+                            {{ percentage }}%
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="mb-3">
+                    <h6>Invitees</h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Phone</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for invitee in event.invitees %}
+                                <tr>
+                                    <td>{{ invitee.name }}</td>
+                                    <td>{{ invitee.phone }}</td>
+                                    <td>
+                                        <span class="badge bg-{{ {
+                                            'pending': 'secondary',
+                                            'invited': 'primary',
+                                            'YES': 'success',
+                                            'NO': 'danger',
+                                            'EXPIRED': 'warning'
+                                        }[invitee.status] }}">
+                                            {{ invitee.status }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <div class="btn-group">
+                                            <form action="{{ url_for('events.test_sms', event_id=event._id, invitee_id=invitee._id) }}" 
+                                                  method="POST" 
+                                                  class="d-inline me-1">
+                                                <button type="submit" 
+                                                        class="btn btn-sm btn-info" 
+                                                        onclick="return confirm('Send test message to {{ invitee.name }}?')">
+                                                    Test SMS
+                                                </button>
+                                            </form>
+                                            <form action="{{ url_for('events.delete_invitee', event_id=event._id, invitee_id=invitee._id) }}" 
+                                                  method="POST" 
+                                                  class="d-inline">
+                                                <button type="submit" 
+                                                        class="btn btn-sm btn-danger"
+                                                        onclick="return confirm('Remove {{ invitee.name }}?')">
+                                                    Remove
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addInviteesModal-{{ event._id }}">
+                        Add Invitees
+                    </button>
+                    <form action="{{ url_for('events.send_invitations', event_id=event._id) }}" method="POST" class="d-inline">
+                        <button type="submit" class="btn btn-primary">Send Invitations</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Create Event Modal -->
+<div class="modal fade" id="createEventModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form action="{{ url_for('events.manage_events') }}" method="POST">
+                <div class="modal-header">
+                    <h5 class="modal-title">Create New Event</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Event Name</label>
+                        <input type="text" class="form-control" name="name" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Date</label>
+                        <input type="date" class="form-control" name="date" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Capacity</label>
+                        <input type="number" class="form-control" name="capacity" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Batch Size</label>
+                        <input type="number" class="form-control" name="batch_size" required>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Create Event</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{% for event in events %}
+<!-- Add Invitees Modal for each event -->
+<div class="modal fade" id="addInviteesModal-{{ event._id }}" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form action="{{ url_for('events.add_invitees', event_id=event._id) }}" method="POST">
+                <div class="modal-header">
+                    <h5 class="modal-title">Add Invitees to {{ event.name }}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Select Invitees</label>
+                        <select class="form-control invitee-select" name="invitees[]" multiple="multiple">
+                            {% for contact in master_list %}
+                                <option value="{{ contact._id }}">
+                                    {{ contact.name }} ({{ contact.phone }})
+                                    {% if contact.tags %}
+                                        - Tags: {{ contact.tags|join(', ') }}
+                                    {% endif %}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Add Selected</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endfor %}
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+$(document).ready(function() {
+    $('.invitee-select').each(function() {
+        $(this).select2({
+            theme: 'bootstrap-5',
+            width: '100%',
+            placeholder: 'Select contacts to invite',
+            allowClear: true,
+            dropdownParent: $(this).closest('.modal')
+        });
+    });
+});
+</script>
+{% endblock %}
