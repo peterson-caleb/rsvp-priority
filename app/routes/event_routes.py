@@ -1,6 +1,7 @@
 # app/routes/event_routes.py
 from flask import Blueprint, render_template, request, redirect, url_for, flash
-from .. import event_service, contact_service
+from .. import event_service, contact_service, sms_service
+from bson import ObjectId
 
 bp = Blueprint('events', __name__)
 
@@ -117,4 +118,40 @@ def send_invitations(event_id):
     except Exception as e:
         flash(f'Error sending invitations: {str(e)}', 'error')
     
+    return redirect(url_for('events.manage_events'))
+
+@bp.route('/test_sms/<event_id>/<invitee_id>', methods=['POST'])
+def test_sms(event_id, invitee_id):
+    try:
+        # Get event from MongoDB directly
+        event_data = event_service.events_collection.find_one({"_id": ObjectId(event_id)})
+        if not event_data:
+            flash('Event not found', 'error')
+            return redirect(url_for('events.manage_events'))
+            
+        # Find the invitee
+        invitee = next((i for i in event_data.get('invitees', []) 
+                       if str(i['_id']) == invitee_id), None)
+        
+        if not invitee:
+            flash('Invitee not found', 'error')
+            return redirect(url_for('events.manage_events'))
+            
+        # Send test message
+        print(f"Sending test SMS to {invitee['phone']}")  # Debug print
+        message_sid = sms_service.send_invitation(
+            phone_number=invitee['phone'],
+            event_name=event_data['name'],
+            event_date=event_data['date']
+        )
+        
+        if message_sid:
+            flash(f"Test message sent successfully to {invitee['name']} ({invitee['phone']})", 'success')
+        else:
+            flash(f"Failed to send test message to {invitee['name']}", 'error')
+            
+    except Exception as e:
+        print(f"Error in test_sms: {str(e)}")  # Debug print
+        flash(f'Error: {str(e)}', 'error')
+        
     return redirect(url_for('events.manage_events'))
