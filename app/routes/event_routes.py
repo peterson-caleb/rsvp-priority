@@ -2,10 +2,15 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from .. import event_service, contact_service, sms_service
 from bson import ObjectId
+from flask_login import login_required
+
+# At the top of both event_routes.py and contact_routes.py:
+from flask_login import login_required
 
 bp = Blueprint('events', __name__)
 
 @bp.route('/events', methods=['GET', 'POST'])
+@login_required
 def manage_events():
     if request.method == 'POST':
         event_data = {
@@ -37,6 +42,7 @@ def manage_events():
     return render_template('events/list.html', events=events, master_list=master_list)
 
 @bp.route('/add_invitees/<event_id>', methods=['POST'])
+@login_required
 def add_invitees(event_id):
     selected_invitee_ids = request.form.getlist('invitees[]')
     print("Selected IDs:", selected_invitee_ids)  # Debug print
@@ -66,12 +72,27 @@ def add_invitees(event_id):
     return redirect(url_for('events.manage_events'))
 
 @bp.route('/delete_invitee/<event_id>/<invitee_id>', methods=['POST'])
+@login_required
 def delete_invitee(event_id, invitee_id):
     event_service.delete_invitee(event_id, invitee_id)
     flash('Invitee removed successfully!', 'success')
     return redirect(url_for('events.manage_events'))
 
+
+@bp.route('/delete_event/<event_id>', methods=['POST'])
+@login_required
+def delete_event(event_id):
+    try:
+        if event_service.delete_event(event_id):
+            flash('Event deleted successfully!', 'success')
+        else:
+            flash('Event not found.', 'error')
+    except Exception as e:
+        flash(f'Error deleting event: {str(e)}', 'error')
+    return redirect(url_for('events.manage_events'))
+
 @bp.route('/send_invitations/<event_id>', methods=['POST'])
+@login_required
 def send_invitations(event_id):
     try:
         # Get the event
@@ -120,6 +141,7 @@ def send_invitations(event_id):
     
     return redirect(url_for('events.manage_events'))
 
+
 @bp.route('/test_sms/<event_id>/<invitee_id>', methods=['POST'])
 def test_sms(event_id, invitee_id):
     try:
@@ -142,7 +164,8 @@ def test_sms(event_id, invitee_id):
         message_sid = sms_service.send_invitation(
             phone_number=invitee['phone'],
             event_name=event_data['name'],
-            event_date=event_data['date']
+            event_date=event_data['date'],
+            event_code=event_data['event_code']  # Add the event_code here
         )
         
         if message_sid:

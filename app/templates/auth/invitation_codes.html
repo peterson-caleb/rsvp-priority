@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <div class="row">
+        <div class="col-md-12">
+            <h2>Manage Invitation Codes</h2>
+            
+            <!-- Create new code form -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">Create New Invitation Code</h5>
+                </div>
+                <div class="card-body">
+                    <form method="POST">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label for="expires_in_days" class="form-label">Expires In (Days)</label>
+                                    <input type="number" class="form-control" id="expires_in_days" 
+                                           name="expires_in_days" value="7" min="1" required>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label for="max_uses" class="form-label">Maximum Uses</label>
+                                    <input type="number" class="form-control" id="max_uses" 
+                                           name="max_uses" value="1" min="1" required>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label class="form-label">&nbsp;</label>
+                                    <button type="submit" class="btn btn-primary w-100">Generate Code</button>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            
+            <!-- Active codes list -->
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Active Invitation Codes</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Code</th>
+                                    <th>Created</th>
+                                    <th>Expires</th>
+                                    <th>Uses</th>
+                                    <th>Max Uses</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for code in codes %}
+                                <tr>
+                                    <td>{{ code.code }}</td>
+                                    <td>{{ code.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                                    <td>{{ code.expires_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                                    <td>{{ code.uses }}</td>
+                                    <td>{{ code.max_uses }}</td>
+                                    <td>
+                                        {% if code.is_active %}
+                                            <span class="badge bg-success">Active</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">Inactive</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
