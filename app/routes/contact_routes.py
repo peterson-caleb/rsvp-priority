@@ -1,10 +1,12 @@
 # app/routes/contact_routes.py
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from .. import contact_service
+from flask_login import login_required
 
 bp = Blueprint('contacts', __name__)
 
 @bp.route('/master-list', methods=['GET', 'POST'])
+@login_required
 def manage_master_list():
     if request.method == 'POST':
         contact_data = {
@@ -31,12 +33,14 @@ def manage_master_list():
                          selected_tags=tag_filter.split(',') if tag_filter else [])
 
 @bp.route('/delete_contact/<contact_id>', methods=['POST'])
+@login_required
 def delete_contact(contact_id):
     contact_service.delete_contact(contact_id)
     flash('Contact deleted successfully!', 'success')
     return redirect(url_for('contacts.manage_master_list'))
 
 @bp.route('/edit_contact/<contact_id>', methods=['POST'])
+@login_required
 def edit_contact(contact_id):
     contact_data = {
         'name': request.form['name'],

@@ -3,3 +3,7 @@ flask-pymongo==2.3.0
 python-dotenv==1.0.0
 twilio==8.10.0
 pymongo[srv]>=3.11.0
+Flask-Login==0.6.2
+Werkzeug==2.3.7
+bcrypt==4.0.1
+APScheduler==3.10.4

@@ -8,11 +8,11 @@ class SMSService:
         self.client = Client(twilio_sid, twilio_auth_token)
         self.twilio_phone = twilio_phone
 
-    def send_invitation(self, phone_number, event_name, event_date):
+    def send_invitation(self, phone_number, event_name, event_date, event_code):
         try:
             message = self.client.messages.create(
                 body=f"You're invited to {event_name} on {event_date}! "
-                     f"Reply YES to accept or NO to decline.",
+                     f"Reply '{event_code} YES' to accept or '{event_code} NO' to decline.",
                 from_=self.twilio_phone,
                 to=phone_number
             )
