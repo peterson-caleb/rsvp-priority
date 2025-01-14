@@ -12,6 +12,7 @@ class Event:
         self.created_at = datetime.utcnow()
         self.event_code = self._generate_event_code()
         self.invitation_expiry_hours = invitation_expiry_hours or 24
+        self._id = None  # Add this line
 
     def _generate_event_code(self):
         """Generate a unique event code"""
@@ -32,6 +33,7 @@ class Event:
         event.event_code = data.get('event_code', event._generate_event_code())
         if 'invitation_expiry_hours' in data:
             event.invitation_expiry_hours = data['invitation_expiry_hours']
+        event._id = data.get('_id')  # Add this line
         return event
 
     def to_dict(self):
