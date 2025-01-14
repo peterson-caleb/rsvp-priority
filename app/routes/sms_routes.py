@@ -62,20 +62,7 @@ def handle_sms():
         # Log parsed message components
         sms_logger.info(f"Parsed message - Phone: {phone_number}, Content: {message_body}")
         
-        # Parse event code and response
-        parts = message_body.strip().upper().split()
-        if len(parts) != 2:
-            sms_logger.warning(f"Invalid message format from {phone_number}: {message_body}")
-            resp = MessagingResponse()
-            resp.message("Invalid format. Please reply with 'EVENT_CODE YES' or 'EVENT_CODE NO'")
-            return str(resp)
-
-        event_code, response = parts
-        
-        # Log the parsed components
-        sms_logger.info(f"Parsed components - Event Code: {event_code}, Response: {response}")
-        
-        # Process the RSVP
+        # Process the RSVP - now just handles status update
         result = event_service.process_rsvp(phone_number, message_body)
         
         # Log the processing result
@@ -83,12 +70,12 @@ def handle_sms():
         
         # Send appropriate response
         resp = MessagingResponse()
-        if result == 'FULL':
-            message = "Sorry, this event is now at full capacity. We'll add you to the waitlist."
-            sms_logger.info(f"Event full response sent to {phone_number}")
-        elif result in ['YES', 'NO']:
-            message = "Thank you for your response!"
-            sms_logger.info(f"Confirmation sent to {phone_number} for response: {result}")
+        if result == 'YES':
+            message = "Thank you for your response! You're confirmed for the event."
+            sms_logger.info(f"Confirmation sent to {phone_number}")
+        elif result == 'NO':
+            message = "Thank you for letting us know you can't make it."
+            sms_logger.info(f"Decline confirmation sent to {phone_number}")
         else:
             message = "Sorry, we couldn't process your response. Please reply with 'EVENT_CODE YES' or 'EVENT_CODE NO'."
             sms_logger.warning(f"Invalid response from {phone_number}: {message_body}")
