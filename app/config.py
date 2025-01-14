@@ -28,3 +28,8 @@ class Config:
     SMS_LOG_FORMAT = '%(asctime)s - %(levelname)s - %(message)s'
     SMS_LOG_MAX_BYTES = 10000000  # 10MB
     SMS_LOG_BACKUP_COUNT = 5
+    
+    # Scheduler Configuration
+    SCHEDULER_ENABLED = os.getenv('SCHEDULER_ENABLED', 'true').lower() == 'true'
+    EXPIRY_CHECK_INTERVAL = int(os.getenv('EXPIRY_CHECK_INTERVAL', '1'))  # minutes
+    CAPACITY_CHECK_INTERVAL = int(os.getenv('CAPACITY_CHECK_INTERVAL', '1'))  # minutes
