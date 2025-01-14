@@ -44,8 +44,12 @@ def create_app(config_class=Config):
         app.config['TWILIO_PHONE']
     )
     
-    # Initialize other services
-    event_service = EventService(mongo.db, sms_service)  # Pass sms_service here
+    # Initialize services
+    event_service = EventService(
+        db=mongo.db,
+        sms_service=sms_service,
+        invitation_expiry_hours=app.config['INVITATION_EXPIRY_HOURS']
+    )
     contact_service = ContactService(mongo.db)
     user_service = UserService(mongo.db)
     registration_code_service = RegistrationCodeService(mongo.db)

@@ -2,12 +2,47 @@
 from datetime import datetime, timedelta
 from bson import ObjectId
 from ..models.event import Event
+import logging
+from logging.handlers import RotatingFileHandler
+import os
 
 class EventService:
-    def __init__(self, db, sms_service=None):
+    def __init__(self, db, sms_service=None, invitation_expiry_hours=24):
         self.db = db
         self.events_collection = db['events']
         self.sms_service = sms_service
+        self.invitation_expiry_hours = invitation_expiry_hours
+        
+        # Setup logging
+        self.logger = logging.getLogger('event_service')
+        self.logger.setLevel(logging.INFO)
+
+        # Create handlers if they don't exist
+        if not self.logger.handlers:
+            # Create logs directory if it doesn't exist
+            if not os.path.exists('logs'):
+                os.makedirs('logs')
+
+            # File handler
+            file_handler = RotatingFileHandler(
+                'logs/event_service.log',
+                maxBytes=1024 * 1024,  # 1MB
+                backupCount=5
+            )
+
+            # Console handler
+            console_handler = logging.StreamHandler()
+
+            # Create formatter
+            formatter = logging.Formatter(
+                '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+            )
+            
+            file_handler.setFormatter(formatter)
+            console_handler.setFormatter(formatter)
+
+            self.logger.addHandler(file_handler)
+            self.logger.addHandler(console_handler)
 
     def check_expired_invitations(self):
         """Check all events for expired invitations"""
