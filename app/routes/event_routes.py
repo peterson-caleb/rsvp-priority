@@ -1,6 +1,7 @@
 # app/routes/event_routes.py
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from .. import event_service, contact_service
+from datetime import datetime
 from bson import ObjectId
 from flask_login import login_required
 
@@ -33,7 +34,9 @@ def manage_events():
         if '_id' in contact:
             contact['_id'] = str(contact['_id'])
 
-    return render_template('events/list.html', events=events, master_list=master_list)
+    now = datetime.now()
+
+    return render_template('events/list.html', events=events, master_list=master_list, now=now)
 
 @bp.route('/add_invitees/<event_id>', methods=['POST'])
 @login_required
