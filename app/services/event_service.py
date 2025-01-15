@@ -1,10 +1,10 @@
-# app/services/event_service.py
 from datetime import datetime, timedelta
 from bson import ObjectId
 from ..models.event import Event
 import logging
 from logging.handlers import RotatingFileHandler
 import os
+import pytz
 
 class EventService:
     def __init__(self, db, sms_service=None, invitation_expiry_hours=24):
@@ -12,28 +12,27 @@ class EventService:
         self.events_collection = db['events']
         self.sms_service = sms_service
         self.invitation_expiry_hours = invitation_expiry_hours
+        self.timezone = pytz.timezone('UTC')  # Default to UTC
         
         # Setup logging
-        self.logger = logging.getLogger('event_service')
-        self.logger.setLevel(logging.INFO)
+        self.logger = self._setup_logging()
 
-        # Create handlers if they don't exist
-        if not self.logger.handlers:
-            # Create logs directory if it doesn't exist
+    def _setup_logging(self):
+        """Configure logging for event service"""
+        logger = logging.getLogger('event_service')
+        logger.setLevel(logging.INFO)
+
+        if not logger.handlers:
             if not os.path.exists('logs'):
                 os.makedirs('logs')
 
-            # File handler
             file_handler = RotatingFileHandler(
                 'logs/event_service.log',
                 maxBytes=1024 * 1024,  # 1MB
                 backupCount=5
             )
-
-            # Console handler
+            
             console_handler = logging.StreamHandler()
-
-            # Create formatter
             formatter = logging.Formatter(
                 '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
             )
@@ -41,8 +40,22 @@ class EventService:
             file_handler.setFormatter(formatter)
             console_handler.setFormatter(formatter)
 
-            self.logger.addHandler(file_handler)
-            self.logger.addHandler(console_handler)
+            logger.addHandler(file_handler)
+            logger.addHandler(console_handler)
+
+        return logger
+
+    def set_timezone(self, timezone_str):
+        """Set the timezone for the service"""
+        try:
+            self.timezone = pytz.timezone(timezone_str)
+        except pytz.exceptions.UnknownTimeZoneError:
+            self.logger.error(f"Invalid timezone: {timezone_str}, defaulting to UTC")
+            self.timezone = pytz.UTC
+
+    def get_current_time(self):
+        """Get current time in service timezone"""
+        return datetime.now(self.timezone)
 
     def check_expired_invitations(self):
         """Check all events for expired invitations"""
@@ -54,37 +67,41 @@ class EventService:
                 event_id = str(event_data['_id'])
                 event = Event.from_dict(event_data)
                 
-                # Check for expired invitations
                 updated = self._check_event_expired_invitations(event)
                 
                 if updated:
-                    # Only update database if changes were made
                     self.update_event(event_id, {"invitees": event.invitees})
                     
             except Exception as e:
                 self.logger.error(f"Error checking expiration for event {event_data.get('_id')}: {str(e)}")
 
     def _check_event_expired_invitations(self, event):
-        """
-        Check single event for expired invitations.
-        Moved from Event model to service layer.
-        """
-        now = datetime.utcnow()
+        """Check single event for expired invitations"""
+        now = self.get_current_time()
         updated = False
 
         for invitee in event.invitees:
-            if invitee['status'] != 'invited':
+            if invitee['status'] not in ['invited', 'ERROR']:
                 continue
 
             if 'invited_at' not in invitee:
                 self.logger.warning(f"Found invited status but no invited_at timestamp for invitee in event {event.event_code}")
                 continue
 
-            hours_elapsed = (now - invitee['invited_at']).total_seconds() / 3600
+            # Convert invited_at to timezone-aware
+            invited_at = invitee['invited_at'].replace(tzinfo=self.timezone)
+            hours_elapsed = (now - invited_at).total_seconds() / 3600
+
             if hours_elapsed > event.invitation_expiry_hours:
                 self.logger.info(f"Expiring invitation for {invitee.get('phone')} in event {event.event_code}")
                 invitee['status'] = 'EXPIRED'
                 invitee['expired_at'] = now
+                updated = True
+
+            # Retry failed invitations after 1 hour
+            elif invitee['status'] == 'ERROR' and hours_elapsed > 1:
+                self.logger.info(f"Retrying failed invitation for {invitee.get('phone')} in event {event.event_code}")
+                invitee['status'] = 'pending'
                 updated = True
 
         return updated
@@ -110,48 +127,58 @@ class EventService:
     def _calculate_available_spots(self, event):
         """Calculate available spots in an event"""
         confirmed_count = sum(1 for i in event.invitees if i['status'] == 'YES')
-        return event.capacity - confirmed_count
+        invited_count = sum(1 for i in event.invitees if i['status'] == 'invited')
+        return event.capacity - (confirmed_count + invited_count)
 
     def _get_next_invitees(self, event, limit):
-        """Get next set of invitees based on available capacity"""
-        return [i for i in event.invitees if i['status'] == 'pending'][:limit]
+        """Get next set of invitees based on priority and available capacity"""
+        pending_invitees = [i for i in event.invitees if i['status'] == 'pending']
+        # Sort by priority (lower number = higher priority)
+        pending_invitees.sort(key=lambda x: x.get('priority', float('inf')))
+        return pending_invitees[:limit]
 
     def _send_invitations(self, event, invitees):
         """Send invitations to specified invitees"""
-        now = datetime.utcnow()
+        now = self.get_current_time()
         updates_made = False
 
         for invitee in invitees:
             try:
-                message_sid = self.sms_service.send_invitation(
+                message_sid, status, error_message = self.sms_service.send_invitation(
                     phone_number=invitee['phone'],
                     event_name=event.name,
                     event_date=event.date,
                     event_code=event.event_code
                 )
                 
+                invitee['status'] = status
+                invitee['invited_at'] = now
+                
                 if message_sid:
-                    invitee['status'] = 'invited'
-                    invitee['invited_at'] = now
                     invitee['message_sid'] = message_sid
-                    updates_made = True
-                    self.logger.info(f"Sent invitation to {invitee['phone']} for event {event.event_code}")
+                if error_message:
+                    invitee['error_message'] = error_message
+                    
+                updates_made = True
+                self.logger.info(f"Updated invitee status to {status} for {invitee['phone']}")
                     
             except Exception as e:
                 self.logger.error(f"Failed to send invitation to {invitee['phone']}: {str(e)}")
+                invitee['status'] = 'ERROR'
+                invitee['error_message'] = str(e)
+                updates_made = True
 
         if updates_made:
             self.update_event(str(event._id), {"invitees": event.invitees})
 
     def process_rsvp(self, phone_number, response_text):
-        """Process RSVP response - now only handles the response update"""
+        """Process RSVP response"""
         parts = response_text.strip().upper().split()
         if len(parts) != 2:
             return None
             
         event_code, response = parts
         
-        # Find event and invitee
         event_data = self.events_collection.find_one({"event_code": event_code})
         if not event_data:
             return None
@@ -162,10 +189,9 @@ class EventService:
         if not invitee or invitee['status'] != 'invited':
             return None
 
-        # Just update the RSVP status
         if response in ['YES', 'NO']:
             invitee['status'] = response
-            invitee['responded_at'] = datetime.utcnow()
+            invitee['responded_at'] = self.get_current_time()
             self.update_event(str(event_data['_id']), {"invitees": event.invitees})
             return response
 
@@ -220,11 +246,10 @@ class EventService:
                 "phone": invitee['phone'],
                 "status": "pending",
                 "priority": start_priority + idx,
-                "added_at": datetime.utcnow()
+                "added_at": self.get_current_time()
             }
             event.invitees.append(new_invitee)
 
-        # Update event with new invitees
         self.update_event(event_id, {"invitees": event.invitees})
         return event.invitees
 
@@ -234,3 +259,47 @@ class EventService:
             {"_id": ObjectId(event_id)},
             {"$pull": {"invitees": {"_id": ObjectId(invitee_id)}}}
         )
+
+    def update_invitee_priority(self, event_id, invitee_id, new_priority):
+        """Update the priority of an invitee"""
+        event = self.get_event(event_id)
+        if not event:
+            raise ValueError("Event not found")
+
+        for invitee in event.invitees:
+            if str(invitee['_id']) == invitee_id:
+                invitee['priority'] = new_priority
+                break
+
+        self.update_event(event_id, {"invitees": event.invitees})
+
+    def reorder_invitees(self, event_id, invitee_order):
+        """Reorder invitees based on provided order of invitee IDs"""
+        event = self.get_event(event_id)
+        if not event:
+            raise ValueError("Event not found")
+
+        # Create lookup of current invitees by ID
+        invitees_dict = {str(i['_id']): i for i in event.invitees}
+        
+        # Create new ordered list while preserving invitees not in the order
+        new_invitees = []
+        priority = 0
+        
+        # First add invitees in the specified order
+        for invitee_id in invitee_order:
+            if invitee_id in invitees_dict:
+                invitee = invitees_dict[invitee_id]
+                invitee['priority'] = priority
+                new_invitees.append(invitee)
+                del invitees_dict[invitee_id]
+                priority += 1
+        
+        # Then add any remaining invitees
+        for invitee in invitees_dict.values():
+            invitee['priority'] = priority
+            new_invitees.append(invitee)
+            priority += 1
+        
+        self.update_event(event_id, {"invitees": new_invitees})
+        return new_invitees

@@ -1,0 +1,261 @@
+{% extends "base.html" %}
+
+{% block title %}Manage Invitees - {{ event.name }}{% endblock %}
+
+{% block extra_css %}
+<link href="https://cdn.jsdelivr.net/npm/dragula@3.7.3/dist/dragula.min.css" rel="stylesheet">
+<style>
+    .invitee-list {
+        min-height: 200px;
+        border: 1px solid #dee2e6;
+        border-radius: 0.25rem;
+        padding: 1rem;
+        background: #f8f9fa;
+    }
+    .invitee-item {
+        background: white;
+        padding: 0.75rem;
+        margin-bottom: 0.5rem;
+        border: 1px solid #dee2e6;
+        border-radius: 0.25rem;
+        cursor: move;
+    }
+    .invitee-item:last-child {
+        margin-bottom: 0;
+    }
+    .invitee-item.is-dragging {
+        opacity: 0.5;
+    }
+    .status-indicator {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        display: inline-block;
+        margin-right: 5px;
+    }
+    .status-pending { background-color: #6c757d; }
+    .status-invited { background-color: #007bff; }
+    .status-yes { background-color: #28a745; }
+    .status-no { background-color: #dc3545; }
+    .status-expired { background-color: #ffc107; }
+    .status-error { background-color: #dc3545; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Header Section -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h1>{{ event.name }}</h1>
+                    <p class="text-muted">
+                        Event Date: {{ event.date }} | 
+                        Capacity: {{ event.capacity }} |
+                        Code: {{ event.event_code }}
+                    </p>
+                </div>
+                <div>
+                    <a href="{{ url_for('events.manage_events') }}" class="btn btn-secondary">
+                        Back to Events
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Status Summary Section -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Status Summary</h5>
+                    <div class="row">
+                        {% set stats = {
+                            'Confirmed': {'count': event.invitees|selectattr("status", "equalto", "YES")|list|length, 'class': 'success'},
+                            'Pending Response': {'count': event.invitees|selectattr("status", "equalto", "invited")|list|length, 'class': 'primary'},
+                            'In Queue': {'count': event.invitees|selectattr("status", "equalto", "pending")|list|length, 'class': 'secondary'},
+                            'Declined': {'count': event.invitees|selectattr("status", "equalto", "NO")|list|length, 'class': 'danger'},
+                            'Expired': {'count': event.invitees|selectattr("status", "equalto", "EXPIRED")|list|length, 'class': 'warning'},
+                            'Failed': {'count': event.invitees|selectattr("status", "equalto", "ERROR")|list|length, 'class': 'danger'}
+                        } %}
+                        
+                        {% for label, data in stats.items() %}
+                        <div class="col-md-2 col-sm-4 mb-3">
+                            <div class="card">
+                                <div class="card-body text-center">
+                                    <h3 class="text-{{ data.class }}">{{ data.count }}</h3>
+                                    <small class="text-muted">{{ label }}</small>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Invitee List Section -->
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Current Invitees</h5>
+                    {% if event.invitees|selectattr("status", "equalto", "ERROR")|list|length > 0 %}
+                    <form action="{{ url_for('events.retry_failed_invitations', event_id=event._id) }}" method="POST" class="d-inline">
+                        <button type="submit" class="btn btn-warning btn-sm">
+                            Retry Failed Invitations
+                        </button>
+                    </form>
+                    {% endif %}
+                </div>
+                <div class="card-body">
+                    <div class="invitee-list" id="inviteeList">
+                        {% for invitee in event.invitees|sort(attribute='priority') %}
+                        <div class="invitee-item" data-id="{{ invitee._id }}">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <span class="status-indicator status-{{ invitee.status|lower }}"></span>
+                                    <strong>{{ invitee.name }}</strong>
+                                    <small class="text-muted">({{ invitee.phone }})</small>
+                                    {% if invitee.status == 'ERROR' %}
+                                    <div class="text-danger small mt-1">
+                                        <i class="bi bi-exclamation-triangle"></i>
+                                        {{ invitee.error_message }}
+                                    </div>
+                                    {% endif %}
+                                </div>
+                                <div class="btn-group">
+                                    <form action="{{ url_for('events.test_sms', event_id=event._id, invitee_id=invitee._id) }}" 
+                                          method="POST" 
+                                          class="d-inline">
+                                        <button type="submit" 
+                                                class="btn btn-sm btn-info me-1" 
+                                                onclick="return confirm('Send test message to {{ invitee.name }}?')">
+                                            Test SMS
+                                        </button>
+                                    </form>
+                                    <form action="{{ url_for('events.delete_invitee', event_id=event._id, invitee_id=invitee._id) }}" 
+                                          method="POST" 
+                                          class="d-inline">
+                                        <button type="submit" 
+                                                class="btn btn-sm btn-danger"
+                                                onclick="return confirm('Remove {{ invitee.name }}?')">
+                                            Remove
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Add Invitees Section -->
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Add Invitees</h5>
+                </div>
+                <div class="card-body">
+                    <!-- Tag Filter -->
+                    <div class="mb-3">
+                        <label class="form-label">Filter by Tags</label>
+                        <form id="tagFilterForm" method="GET">
+                            <select class="form-select tag-select" name="tags" multiple>
+                                {% for tag in all_tags %}
+                                <option value="{{ tag }}" {% if tag in selected_tags %}selected{% endif %}>
+                                    {{ tag }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                            <button type="submit" class="btn btn-primary btn-sm mt-2">Apply Filter</button>
+                        </form>
+                    </div>
+
+                    <!-- Contact Selection -->
+                    <form action="{{ url_for('events.add_invitees', event_id=event._id) }}" method="POST">
+                        <div class="mb-3">
+                            <label class="form-label">Select Contacts</label>
+                            <select class="form-select contact-select" name="invitees[]" multiple>
+                                {% for contact in contacts %}
+                                    {% if contact.phone not in event.invitees|map(attribute='phone')|list %}
+                                    <option value="{{ contact._id }}">
+                                        {{ contact.name }} ({{ contact.phone }})
+                                        {% if contact.tags %}
+                                            - Tags: {{ contact.tags|join(', ') }}
+                                        {% endif %}
+                                    </option>
+                                    {% endif %}
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-success w-100">
+                            Add Selected Contacts
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/dragula@3.7.3/dist/dragula.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize dragula for drag-and-drop
+    var drake = dragula([document.querySelector('#inviteeList')]);
+    
+    // Handle drag end
+    drake.on('drop', function(el, target, source, sibling) {
+        // Get all invitee IDs in new order
+        var inviteeOrder = Array.from(target.children).map(function(item) {
+            return item.dataset.id;
+        });
+        
+        // Send new order to server
+        fetch(`/events/{{ event._id }}/reorder_invitees`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                invitee_order: inviteeOrder
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                alert('Error updating order: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error updating order');
+        });
+    });
+
+    // Initialize Select2 for tags
+    $('.tag-select').select2({
+        theme: 'bootstrap-5',
+        width: '100%',
+        placeholder: 'Select tags to filter',
+        allowClear: true
+    });
+
+    // Initialize Select2 for contacts
+    $('.contact-select').select2({
+        theme: 'bootstrap-5',
+        width: '100%',
+        placeholder: 'Select contacts to add',
+        allowClear: true
+    });
+});
+</script>
+{% endblock %}
