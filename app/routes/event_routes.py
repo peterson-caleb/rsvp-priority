@@ -236,3 +236,4 @@ def toggle_automation(event_id):
         flash(f'An error occurred: {str(e)}', 'danger')
 
     return redirect(url_for('events.manage_invitees', event_id=event_id))
+
