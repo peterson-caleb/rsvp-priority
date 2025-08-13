@@ -5,3 +5,4 @@
   "workspaceFolder": "/workspaces/rsvp-priority",
   "forwardPorts": [5000],
   "postCreateCommand": "echo 'Codespace is ready!'"
+}
