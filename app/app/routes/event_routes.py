@@ -68,31 +68,25 @@ def manage_invitees(event_id):
         selected_tags=selected_tags
     )
 
+# No json import needed anymore
+
 @bp.route('/events/<event_id>/add_invitees', methods=['POST'])
 @login_required
 def add_invitees(event_id):
-    """Add invitees to an event with custom names."""
-    selected_invitee_ids = request.form.getlist('invitee_ids[]')
-    guest_names = request.form.getlist('guest_names[]')
+    """Add invitees to an event from the simple multi-select list."""
+    selected_contact_ids = request.form.getlist('invitees_to_add[]')
 
-    if not selected_invitee_ids:
+    if not selected_contact_ids:
         flash('No invitees selected.', 'warning')
         return redirect(url_for('events.manage_invitees', event_id=event_id))
 
     try:
-        invitees_to_add = []
-        for i, contact_id in enumerate(selected_invitee_ids):
-            contact = contact_service.get_contact(contact_id)
-            if contact:
-                guest_name = guest_names[i] if i < len(guest_names) else contact['name']
-                invitees_to_add.append({
-                    'name': guest_name,
-                    'phone': contact['phone'],
-                    'contact_id': contact_id
-                })
-
-        event_service.add_invitees(event_id, invitees_to_add)
-        flash(f'{len(invitees_to_add)} invitees added successfully!', 'success')
+        # Get the full contact details for each selected ID
+        invitees_to_add = [contact_service.get_contact(cid) for cid in selected_contact_ids]
+        
+        if invitees_to_add:
+            event_service.add_invitees(event_id, invitees_to_add)
+            flash(f'{len(invitees_to_add)} invitees added successfully!', 'success')
         
     except Exception as e:
         flash(f'Error adding invitees: {str(e)}', 'error')
@@ -159,3 +153,4 @@ def submit_rsvp(token, response):
     success, message = event_service.process_rsvp_from_url(token, response)
     
     return render_template("events/rsvp_confirmation.html", success=success, message=message)
+
