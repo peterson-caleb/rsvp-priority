@@ -29,32 +29,25 @@ class TaskScheduler:
 
     def _setup_logging(self):
         """Setup logging configuration"""
-        # Create logs directory if it doesn't exist
         if not os.path.exists('logs'):
             os.makedirs('logs')
 
-        # Create a logger
         self.logger = logging.getLogger('scheduler')
         self.logger.setLevel(logging.INFO)
 
-        # Create rotating file handler
         file_handler = RotatingFileHandler(
             'logs/scheduler.log',
             maxBytes=1024 * 1024,  # 1MB
             backupCount=5
         )
 
-        # Create console handler
         console_handler = logging.StreamHandler()
-
-        # Create formatter
         formatter = logging.Formatter(
             '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
         )
         file_handler.setFormatter(formatter)
         console_handler.setFormatter(formatter)
 
-        # Add handlers to logger if they haven't been added already
         if not self.logger.handlers:
             self.logger.addHandler(file_handler)
             self.logger.addHandler(console_handler)
@@ -82,15 +75,13 @@ class TaskScheduler:
             try:
                 self.logger.info("Starting scheduler...")
                 
-                # Get intervals from config
                 expiry_interval = self.app.config.get('EXPIRY_CHECK_INTERVAL', 1)
                 capacity_interval = self.app.config.get('CAPACITY_CHECK_INTERVAL', 1)
+                reminder_interval = self.app.config.get('REMINDER_CHECK_INTERVAL', 30)
                 
-                # Log configuration
                 self.logger.info(f"Configured intervals - Expiry: {expiry_interval}min, "
-                               f"Capacity: {capacity_interval}min")
+                                 f"Capacity: {capacity_interval}min, Reminder: {reminder_interval}min")
                 
-                # Add job for checking expired invitations
                 self.scheduler.add_job(
                     func=self._check_expired_invitations_job,
                     trigger=IntervalTrigger(minutes=expiry_interval),
@@ -98,7 +89,6 @@ class TaskScheduler:
                     name='Check expired invitations'
                 )
 
-                # Add separate job for managing event capacity
                 self.scheduler.add_job(
                     func=self._manage_event_capacity_job,
                     trigger=IntervalTrigger(minutes=capacity_interval),
@@ -106,11 +96,17 @@ class TaskScheduler:
                     name='Manage event capacity'
                 )
 
+                self.scheduler.add_job(
+                    func=self._send_pending_reminders_job,
+                    trigger=IntervalTrigger(minutes=reminder_interval),
+                    id='send_pending_reminders',
+                    name='Send pending RSVP reminders'
+                )
+
                 self.scheduler.start()
                 self.is_running = True
                 self.logger.info("Scheduler started successfully")
                 
-                # Log next run times
                 self._log_next_run_times()
                 
             except Exception as e:
@@ -136,6 +132,16 @@ class TaskScheduler:
                 self.logger.info("Completed event capacity management")
         except Exception as e:
             self.logger.error(f"Error in manage_event_capacity_job: {str(e)}", exc_info=True)
+
+    def _send_pending_reminders_job(self):
+        """Job that handles sending reminders for pending RSVPs."""
+        try:
+            with self.app.app_context():
+                self.logger.info("Starting pending reminders job...")
+                self.event_service.send_pending_reminders()
+                self.logger.info("Completed pending reminders job")
+        except Exception as e:
+            self.logger.error(f"Error in _send_pending_reminders_job: {str(e)}", exc_info=True)
 
     def _log_next_run_times(self):
         """Helper method to log next scheduled run times"""

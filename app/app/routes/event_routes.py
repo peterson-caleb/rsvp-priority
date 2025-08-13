@@ -1,11 +1,10 @@
 # app/routes/event_routes.py
-from flask import Blueprint, render_template, request, redirect, url_for, flash
-from .. import event_service, contact_service, sms_service
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
+from .. import event_service, contact_service
+from datetime import datetime
 from bson import ObjectId
 from flask_login import login_required
-
-# At the top of both event_routes.py and contact_routes.py:
-from flask_login import login_required
+import pytz
 
 bp = Blueprint('events', __name__)
 
@@ -13,154 +12,150 @@ bp = Blueprint('events', __name__)
 @login_required
 def manage_events():
     if request.method == 'POST':
-        event_data = {
-            'name': request.form['name'],
-            'date': request.form['date'],
-            'capacity': int(request.form['capacity']),
-            'batch_size': int(request.form.get('batch_size', 10))
-        }
-        event_service.create_event(event_data)
-        flash('Event created successfully!', 'success')
+        try:
+            event_data = {
+                'name': request.form['name'],
+                'date': request.form['date'],
+                'capacity': int(request.form['capacity'])
+            }
+            event_service.create_event(event_data)
+            flash('Event created successfully!', 'success')
+        except ValueError as e:
+            flash(f'Error creating event: {str(e)}', 'error')
         return redirect(url_for('events.manage_events'))
 
     events = event_service.get_events()
-    master_list = contact_service.get_contacts()
-
-    # Debug print
-    print("Master List:", master_list)
     
     for event in events:
         event['_id'] = str(event['_id'])
         for invitee in event.get('invitees', []):
             if '_id' in invitee:
                 invitee['_id'] = str(invitee['_id'])
+
+    now = datetime.now(pytz.UTC)
+
+    return render_template('events/list.html', events=events, now=now)
+
+@bp.route('/events/<event_id>/invitees', methods=['GET'])
+@login_required
+def manage_invitees(event_id):
+    """Dedicated page for managing event invitees"""
+    event = event_service.get_event(event_id)
+    if not event:
+        flash('Event not found', 'error')
+        return redirect(url_for('events.manage_events'))
+
+    contacts = contact_service.get_contacts()
+    all_tags = contact_service.get_all_tags()
     
-    for contact in master_list:
-        if '_id' in contact:
-            contact['_id'] = str(contact['_id'])
+    selected_tags = request.args.getlist('tags')
+    
+    if selected_tags:
+        contacts = [c for c in contacts if any(tag in c.get('tags', []) for tag in selected_tags)]
+    
+    event._id = str(event._id)
+    for invitee in event.invitees:
+        invitee['_id'] = str(invitee['_id'])
+    
+    for contact in contacts:
+        contact['_id'] = str(contact['_id'])
 
-    return render_template('events/list.html', events=events, master_list=master_list)
+    return render_template(
+        'events/manage_invitees.html',
+        event=event,
+        contacts=contacts,
+        all_tags=all_tags,
+        selected_tags=selected_tags
+    )
 
-@bp.route('/add_invitees/<event_id>', methods=['POST'])
+@bp.route('/events/<event_id>/add_invitees', methods=['POST'])
 @login_required
 def add_invitees(event_id):
-    selected_invitee_ids = request.form.getlist('invitees[]')
-    print("Selected IDs:", selected_invitee_ids)  # Debug print
+    """Add invitees to an event with custom names."""
+    selected_invitee_ids = request.form.getlist('invitee_ids[]')
+    guest_names = request.form.getlist('guest_names[]')
 
     if not selected_invitee_ids:
         flash('No invitees selected.', 'warning')
-        return redirect(url_for('events.manage_events'))
+        return redirect(url_for('events.manage_invitees', event_id=event_id))
 
     try:
-        # Convert string IDs to ObjectId and get the contacts
-        invitees = []
-        for id in selected_invitee_ids:
-            contact = contact_service.get_contact(id)
+        invitees_to_add = []
+        for i, contact_id in enumerate(selected_invitee_ids):
+            contact = contact_service.get_contact(contact_id)
             if contact:
-                invitees.append(contact)
-            print(f"Found contact for ID {id}:", contact)  # Debug print
+                guest_name = guest_names[i] if i < len(guest_names) else contact['name']
+                invitees_to_add.append({
+                    'name': guest_name,
+                    'phone': contact['phone'],
+                    'contact_id': contact_id
+                })
 
-        print("All invitees to add:", invitees)  # Debug print
-
-        # Add invitees to event
-        event_service.add_invitees(event_id, invitees)
-        flash('Invitees added successfully!', 'success')
+        event_service.add_invitees(event_id, invitees_to_add)
+        flash(f'{len(invitees_to_add)} invitees added successfully!', 'success')
+        
     except Exception as e:
-        print("Error adding invitees:", str(e))  # Debug print
         flash(f'Error adding invitees: {str(e)}', 'error')
     
-    return redirect(url_for('events.manage_events'))
+    return redirect(url_for('events.manage_invitees', event_id=event_id))
 
-@bp.route('/delete_invitee/<event_id>/<invitee_id>', methods=['POST'])
+@bp.route('/events/<event_id>/reorder_invitees', methods=['POST'])
+@login_required
+def reorder_invitees(event_id):
+    """Update invitee order based on provided order of IDs"""
+    try:
+        new_order = request.json.get('invitee_order', [])
+        if not new_order:
+            return jsonify({'error': 'No order provided'}), 400
+
+        event_service.reorder_invitees(event_id, new_order)
+        return jsonify({'message': 'Order updated successfully'})
+        
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@bp.route('/events/<event_id>/delete_invitee/<invitee_id>', methods=['POST'])
 @login_required
 def delete_invitee(event_id, invitee_id):
-    event_service.delete_invitee(event_id, invitee_id)
-    flash('Invitee removed successfully!', 'success')
-    return redirect(url_for('events.manage_events'))
-
-@bp.route('/send_invitations/<event_id>', methods=['POST'])
-@login_required
-def send_invitations(event_id):
+    """Remove an invitee from an event"""
     try:
-        # Get the event
-        event = event_service.get_event(event_id)
-        if not event:
-            flash('Event not found', 'error')
-            return redirect(url_for('events.manage_events'))
-        
-        # Get pending invitees
-        pending_invitees = [i for i in event.invitees if i['status'] == 'pending']
-        if not pending_invitees:
-            flash('No pending invitees to invite', 'warning')
-            return redirect(url_for('events.manage_events'))
-        
-        # Send invitations
-        success_count = 0
-        fail_count = 0
-        for invitee in pending_invitees:
-            try:
-                # Send SMS
-                message_sid = sms_service.send_invitation(
-                    phone_number=invitee['phone'],
-                    event_name=event.name,
-                    event_date=event.date
-                )
-                
-                if message_sid:
-                    success_count += 1
-                    # Update invitee status to 'invited'
-                    event_service.update_invitee_status(event_id, invitee['_id'], 'invited')
-                else:
-                    fail_count += 1
-                    
-            except Exception as e:
-                print(f"Error sending invitation to {invitee['phone']}: {str(e)}")
-                fail_count += 1
-        
-        # Flash appropriate message
-        if success_count > 0:
-            flash(f'Successfully sent {success_count} invitations', 'success')
-        if fail_count > 0:
-            flash(f'Failed to send {fail_count} invitations', 'error')
-            
+        event_service.delete_invitee(event_id, invitee_id)
+        flash('Invitee removed successfully!', 'success')
     except Exception as e:
-        flash(f'Error sending invitations: {str(e)}', 'error')
-    
-    return redirect(url_for('events.manage_events'))
+        flash(f'Error removing invitee: {str(e)}', 'error')
+    return redirect(url_for('events.manage_invitees', event_id=event_id))
 
-@bp.route('/test_sms/<event_id>/<invitee_id>', methods=['POST'])
+@bp.route('/events/<event_id>/delete', methods=['POST'])
 @login_required
-def test_sms(event_id, invitee_id):
+def delete_event(event_id):
+    """Delete an entire event"""
     try:
-        # Get event from MongoDB directly
-        event_data = event_service.events_collection.find_one({"_id": ObjectId(event_id)})
-        if not event_data:
-            flash('Event not found', 'error')
-            return redirect(url_for('events.manage_events'))
-            
-        # Find the invitee
-        invitee = next((i for i in event_data.get('invitees', []) 
-                       if str(i['_id']) == invitee_id), None)
-        
-        if not invitee:
-            flash('Invitee not found', 'error')
-            return redirect(url_for('events.manage_events'))
-            
-        # Send test message
-        print(f"Sending test SMS to {invitee['phone']}")  # Debug print
-        message_sid = sms_service.send_invitation(
-            phone_number=invitee['phone'],
-            event_name=event_data['name'],
-            event_date=event_data['date']
-        )
-        
-        if message_sid:
-            flash(f"Test message sent successfully to {invitee['name']} ({invitee['phone']})", 'success')
+        if event_service.delete_event(event_id):
+            flash('Event deleted successfully!', 'success')
         else:
-            flash(f"Failed to send test message to {invitee['name']}", 'error')
-            
+            flash('Event not found.', 'error')
     except Exception as e:
-        print(f"Error in test_sms: {str(e)}")  # Debug print
-        flash(f'Error: {str(e)}', 'error')
-        
+        flash(f'Error deleting event: {str(e)}', 'error')
     return redirect(url_for('events.manage_events'))
+
+@bp.route('/rsvp/<token>', methods=['GET'])
+def rsvp_page(token):
+    """The landing page for the guest to click Yes or No."""
+    event, invitee = event_service.find_event_and_invitee_by_token(token)
+    
+    if not event or not invitee:
+        return render_template("events/rsvp_confirmation.html", success=False, message="This invitation link is invalid or has expired.")
+    
+    if invitee['status'] not in ['invited', 'ERROR']:
+        return render_template("events/rsvp_confirmation.html", success=True, message="Thank you, we have already received your response.")
+
+    return render_template("events/rsvp_page.html", event=event, invitee=invitee, token=token)
+
+@bp.route('/rsvp/submit/<token>/<response>', methods=['GET'])
+def submit_rsvp(token, response):
+    """Processes the Yes/No response and shows a confirmation page."""
+    success, message = event_service.process_rsvp_from_url(token, response)
+    
+    return render_template("events/rsvp_confirmation.html", success=success, message=message)

@@ -1,4 +1,5 @@
 # app/config.py
+# app/config.py
 import os
 from dotenv import load_dotenv
 
@@ -13,14 +14,15 @@ class Config:
     
     # RSVP System Configuration
     DEFAULT_BATCH_SIZE = int(os.getenv('DEFAULT_BATCH_SIZE', '10'))
-    INVITATION_EXPIRY_HOURS = float(os.getenv('INVITATION_EXPIRY_HOURS', '24'))  # Changed to float()
+    INVITATION_EXPIRY_HOURS = float(os.getenv('INVITATION_EXPIRY_HOURS', '24'))
     AUTO_PROGRESS_BATCHES = os.getenv('AUTO_PROGRESS_BATCHES', 'true').lower() == 'true'
     WAITLIST_ENABLED = os.getenv('WAITLIST_ENABLED', 'true').lower() == 'true'
     
     # Scheduler Configuration
     SCHEDULER_ENABLED = os.getenv('SCHEDULER_ENABLED', 'true').lower() == 'true'
-    EXPIRY_CHECK_INTERVAL = int(os.getenv('EXPIRY_CHECK_INTERVAL', '15'))  # minutes
-    BATCH_PROCESS_INTERVAL = int(os.getenv('BATCH_PROCESS_INTERVAL', '30'))  # minutes
+    EXPIRY_CHECK_INTERVAL = int(os.getenv('EXPIRY_CHECK_INTERVAL', '1'))  # minutes
+    CAPACITY_CHECK_INTERVAL = int(os.getenv('CAPACITY_CHECK_INTERVAL', '1'))  # minutes
+    REMINDER_CHECK_INTERVAL = int(os.getenv('REMINDER_CHECK_INTERVAL', '30')) # minutes
     
     # Logging configuration
     SMS_LOG_FILE = 'logs/sms.log'
@@ -28,8 +30,3 @@ class Config:
     SMS_LOG_FORMAT = '%(asctime)s - %(levelname)s - %(message)s'
     SMS_LOG_MAX_BYTES = 10000000  # 10MB
     SMS_LOG_BACKUP_COUNT = 5
-    
-    # Scheduler Configuration
-    SCHEDULER_ENABLED = os.getenv('SCHEDULER_ENABLED', 'true').lower() == 'true'
-    EXPIRY_CHECK_INTERVAL = int(os.getenv('EXPIRY_CHECK_INTERVAL', '1'))  # minutes
-    CAPACITY_CHECK_INTERVAL = int(os.getenv('CAPACITY_CHECK_INTERVAL', '1'))  # minutes

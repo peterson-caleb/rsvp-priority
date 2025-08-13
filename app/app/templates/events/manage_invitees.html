@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+
+{% block title %}Manage Invitees - {{ event.name }}{% endblock %}
+
+{% block extra_css %}
+<link href="https://cdn.jsdelivr.net/npm/dragula@3.7.3/dist/dragula.min.css" rel="stylesheet">
+<style>
+    .invitee-list { min-height: 200px; border: 1px solid #dee2e6; border-radius: 0.25rem; padding: 1rem; background: #f8f9fa; }
+    .invitee-item { background: white; padding: 0.75rem; margin-bottom: 0.5rem; border: 1px solid #dee2e6; border-radius: 0.25rem; cursor: move; }
+    .invitee-item:last-child { margin-bottom: 0; }
+    .invitee-item.is-dragging { opacity: 0.5; }
+    .status-indicator { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 8px; }
+    .status-pending { background-color: #6c757d; } .status-invited { background-color: #0d6efd; }
+    .status-yes { background-color: #198754; } .status-no { background-color: #dc3545; }
+    .status-expired { background-color: #ffc107; } .status-error { background-color: #dc3545; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h1>{{ event.name }}</h1>
+                    <p class="text-muted mb-0">Event Date: {{ event.date }} | Capacity: {{ event.capacity }} | Code: {{ event.event_code }}</p>
+                </div>
+                <a href="{{ url_for('events.manage_events') }}" class="btn btn-secondary"><i class="bi bi-arrow-left"></i> Back to Events</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Current Invitees (Drag to Re-prioritize)</h5>
+                    {% if event.invitees|selectattr("status", "equalto", "ERROR")|list|length > 0 %}
+                    <form action="{{ url_for('events.retry_failed_invitations', event_id=event._id) }}" method="POST" class="d-inline">
+                        <button type="submit" class="btn btn-warning btn-sm"><i class="bi bi-arrow-clockwise"></i> Retry Failed</button>
+                    </form>
+                    {% endif %}
+                </div>
+                <div class="card-body">
+                    <div class="invitee-list" id="inviteeList">
+                        {% for invitee in event.invitees|sort(attribute='priority') %}
+                        <div class="invitee-item" data-id="{{ invitee._id }}">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <span class="status-indicator status-{{ invitee.status|lower if invitee.status else 'pending' }}" data-bs-toggle="tooltip" title="{{ invitee.status|capitalize }}"></span>
+                                    <strong>{{ invitee.name }}</strong>
+                                    <small class="text-muted">({{ invitee.phone }})</small>
+                                    {% if invitee.status == 'ERROR' and invitee.error_message %}
+                                    <div class="text-danger small mt-1"><i class="bi bi-exclamation-triangle"></i> {{ invitee.error_message }}</div>
+                                    {% endif %}
+                                </div>
+                                <div class="btn-group">
+                                    <form action="{{ url_for('events.delete_invitee', event_id=event._id, invitee_id=invitee._id) }}" method="POST" class="d-inline">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Remove {{ invitee.name }}?')">Remove</button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <div class="card">
+                <div class="card-header"><h5 class="mb-0">Add Invitees</h5></div>
+                <div class="card-body">
+                    <form action="{{ url_for('events.add_invitees', event_id=event._id) }}" method="POST" id="addInviteesForm">
+                        <div class="mb-3">
+                            <label class="form-label">Select Contacts from Master List</label>
+                            <select class="form-select contact-select-source" multiple>
+                                {% for contact in contacts %}
+                                    {% if contact.phone not in event.invitees|map(attribute='phone')|list %}
+                                        <option value="{{ contact._id }}" data-name="{{ contact.name }}" data-phone="{{ contact.phone }}">{{ contact.name }} ({{ contact.phone }})</option>
+                                    {% endif %}
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <button type="button" id="addSelectedToList" class="btn btn-secondary btn-sm mb-3">Add to Selection Below</button>
+                        <div class="table-responsive">
+                            <table class="table table-sm">
+                                <thead><tr><th>Guest Name</th><th>Action</th></tr></thead>
+                                <tbody id="inviteeSelectionTable"></tbody>
+                            </table>
+                        </div>
+                        <button type="submit" class="btn btn-success w-100 mt-3"><i class="bi bi-plus-circle"></i> Add to Event</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/dragula@3.7.3/dist/dragula.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var drake = dragula([document.getElementById('inviteeList')]);
+    drake.on('drop', (el, target) => {
+        const inviteeOrder = Array.from(target.children).map(item => item.dataset.id);
+        fetch(`/events/{{ event._id }}/reorder_invitees`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ invitee_order: inviteeOrder })
+        }).catch(err => console.error('Error reordering invitees:', err));
+    });
+
+    $('.contact-select-source').select2({ theme: 'bootstrap-5', width: '100%', placeholder: 'Find contacts...', allowClear: true });
+
+    document.getElementById('addSelectedToList').addEventListener('click', () => {
+        const sourceSelect = document.querySelector('.contact-select-source');
+        const tableBody = document.getElementById('inviteeSelectionTable');
+        Array.from(sourceSelect.selectedOptions).forEach(option => {
+            if (document.querySelector(`input[name="invitee_ids[]"][value="${option.value}"]`)) return;
+            const newRow = `
+                <tr>
+                    <td>
+                        <input type="hidden" name="invitee_ids[]" value="${option.dataset.id || option.value}">
+                        <input type="text" name="guest_names[]" class="form-control form-control-sm" value="${option.dataset.name}">
+                    </td>
+                    <td><button type="button" class="btn btn-danger btn-sm py-0 px-1" onclick="this.closest('tr').remove()">X</button></td>
+                </tr>`;
+            tableBody.insertAdjacentHTML('beforeend', newRow);
+            option.disabled = true;
+        });
+        $(sourceSelect).val(null).trigger('change');
+    });
+});
+</script>
+{% endblock %}
