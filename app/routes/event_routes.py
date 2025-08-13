@@ -73,27 +73,27 @@ def manage_invitees(event_id):
         selected_tags=selected_tags
     )
 
+
 @bp.route('/events/<event_id>/add_invitees', methods=['POST'])
 @login_required
 def add_invitees(event_id):
-    """Add invitees to an event"""
-    selected_invitee_ids = request.form.getlist('invitees[]')
+    """Add invitees to an event from the simple multi-select list."""
+    # THIS IS THE NEW DEBUGGING LINE
+    print(f"DEBUG: Form data received: {request.form}")
+    
+    selected_contact_ids = request.form.getlist('invitees_to_add')
 
-    if not selected_invitee_ids:
+    if not selected_contact_ids:
         flash('No invitees selected.', 'warning')
         return redirect(url_for('events.manage_invitees', event_id=event_id))
 
     try:
-        # Get the contacts from selected IDs
-        invitees = []
-        for id in selected_invitee_ids:
-            contact = contact_service.get_contact(id)
-            if contact:
-                invitees.append(contact)
-
-        # Add invitees to event
-        event_service.add_invitees(event_id, invitees)
-        flash('Invitees added successfully!', 'success')
+        # Get the full contact details for each selected ID
+        invitees_to_add = [contact_service.get_contact(cid) for cid in selected_contact_ids]
+        
+        if invitees_to_add:
+            event_service.add_invitees(event_id, invitees_to_add)
+            flash(f'{len(invitees_to_add)} invitees added successfully!', 'success')
         
     except Exception as e:
         flash(f'Error adding invitees: {str(e)}', 'error')
