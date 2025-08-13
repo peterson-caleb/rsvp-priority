@@ -191,9 +191,13 @@ class EventService:
         for idx, invitee in enumerate(invitees):
             if invitee['phone'] in current_phones: continue
             new_invitee = {
-                "_id": ObjectId(), "name": invitee['name'], "phone": invitee['phone'],
-                "status": "pending", "priority": start_priority + idx,
-                "added_at": self.get_current_time()
+                "_id": ObjectId(),
+                "name": invitee['name'],
+                "phone": invitee['phone'],
+                "status": "pending",
+                "priority": start_priority + idx,
+                "added_at": self.get_current_time(),
+                "contact_id": str(invitee['_id']) # <-- ADD THIS LINE
             }
             event.invitees.append(new_invitee)
         self.update_event(event_id, {"invitees": event.invitees})
