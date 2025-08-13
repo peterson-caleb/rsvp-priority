@@ -6,8 +6,6 @@ import string
 class Event:
     """
     Event model representing a single event in the RSVP system.
-    Only contains data structure and basic validation.
-    Business logic is handled in EventService.
     """
     def __init__(self, name, date, capacity, invitation_expiry_hours=24):
         self.name = name
@@ -28,13 +26,13 @@ class Event:
         return f"{prefix}{numbers}"
 
     @classmethod
-    def from_dict(cls, data):
+    def from_dict(cls, data, invitation_expiry_hours=24): # <-- FIX #1: Added the argument here
         """Create an event instance from dictionary data"""
         event = cls(
             name=data['name'],
             date=data['date'],
             capacity=data['capacity'],
-            invitation_expiry_hours=data.get('invitation_expiry_hours', 24)
+            invitation_expiry_hours=invitation_expiry_hours # <-- FIX #2: Use the argument here
         )
         event.invitees = data.get('invitees', [])
         event.created_at = data.get('created_at', datetime.utcnow())
