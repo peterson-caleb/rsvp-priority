@@ -68,13 +68,14 @@ def manage_invitees(event_id):
         selected_tags=selected_tags
     )
 
-# No json import needed anymore
-
 @bp.route('/events/<event_id>/add_invitees', methods=['POST'])
 @login_required
 def add_invitees(event_id):
     """Add invitees to an event from the simple multi-select list."""
-    selected_contact_ids = request.form.getlist('invitees_to_add[]')
+    # THIS IS THE NEW DEBUGGING LINE
+    print(f"DEBUG: Form data received: {request.form}")
+    
+    selected_contact_ids = request.form.getlist('invitees_to_add')
 
     if not selected_contact_ids:
         flash('No invitees selected.', 'warning')
