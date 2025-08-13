@@ -3,6 +3,7 @@ from flask_pymongo import PyMongo
 from flask_login import LoginManager, login_required
 from .config import Config
 import logging
+from datetime import datetime
 
 mongo = PyMongo()
 login_manager = LoginManager()
@@ -64,6 +65,10 @@ def create_app(config_class=Config):
     @login_manager.user_loader
     def load_user(user_id):
         return user_service.get_user(user_id)
+
+    @app.context_processor
+    def inject_current_year():
+        return {'current_year': datetime.utcnow().year}
 
     # Register blueprints
     from .routes.event_routes import bp as event_bp
