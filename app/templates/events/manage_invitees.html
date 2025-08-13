@@ -79,11 +79,13 @@
                             <label for="invitees-select" class="form-label">Select people to invite:</label>
                             <select name="invitees_to_add" id="invitees-select" class="form-select" multiple style="height: 200px;">
                                 {% for contact in contacts %}
-                                    {% if contact._id not in event.invitees|map(attribute='contact_id')|list %}
+                                    {# THIS IS THE SIMPLIFIED AND CORRECTED IF CONDITION #}
+                                    {% if contact._id not in current_invitee_ids %}
                                         <option value="{{ contact._id }}">{{ contact.name }} ({{ contact.phone }})</option>
                                     {% endif %}
                                 {% endfor %}
                             </select>
+
                             <div class="form-text">Hold Ctrl/Cmd to select multiple people.</div>
                         </div>
                         <button type="submit" class="btn btn-primary w-100"><i class="bi bi-plus-circle"></i> Add Selected to Event</button>
