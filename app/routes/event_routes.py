@@ -218,3 +218,21 @@ def retry_failed_invitations(event_id):
         flash(f'Error retrying invitations: {str(e)}', 'error')
 
     return redirect(url_for('events.manage_invitees', event_id=event_id))
+
+@bp.route('/events/<event_id>/toggle_automation', methods=['POST'])
+@login_required
+def toggle_automation(event_id):
+    """Toggles the automation status of an event between 'active' and 'paused'."""
+    try:
+        event = event_service.get_event(event_id)
+        if not event:
+            flash('Event not found.', 'error')
+            return redirect(url_for('events.manage_events'))
+
+        new_status = 'active' if event.automation_status == 'paused' else 'paused'
+        event_service.update_event(event_id, {'automation_status': new_status})
+        flash(f'Event automation has been set to {new_status}.', 'success')
+    except Exception as e:
+        flash(f'An error occurred: {str(e)}', 'danger')
+
+    return redirect(url_for('events.manage_invitees', event_id=event_id))

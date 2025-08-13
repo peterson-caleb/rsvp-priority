@@ -15,6 +15,7 @@ class Event:
         self.created_at = datetime.utcnow()
         self.event_code = self._generate_event_code()
         self.invitation_expiry_hours = invitation_expiry_hours
+        self.automation_status = 'paused' # <-- ADD THIS (default to paused)
         self._id = None
 
     def _generate_event_code(self):
@@ -37,6 +38,7 @@ class Event:
         event.invitees = data.get('invitees', [])
         event.created_at = data.get('created_at', datetime.utcnow())
         event.event_code = data.get('event_code', event._generate_event_code())
+        event.automation_status = data.get('automation_status', 'paused') # <-- ADD THIS
         event._id = data.get('_id')
         return event
 
@@ -49,5 +51,6 @@ class Event:
             "invitees": self.invitees,
             "created_at": self.created_at,
             "event_code": self.event_code,
-            "invitation_expiry_hours": self.invitation_expiry_hours
+            "invitation_expiry_hours": self.invitation_expiry_hours,
+            "automation_status": self.automation_status
         }

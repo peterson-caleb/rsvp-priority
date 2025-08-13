@@ -112,6 +112,12 @@ class EventService:
         events = self.events_collection.find({})
         
         for event_data in events:
+            event = Event.from_dict(event_data)
+            
+            # THIS IS THE NEW CHECK
+            if event.automation_status != 'active':
+                continue # Skip this event if it's not active
+
             try:
                 event_id = str(event_data['_id'])
                 event = Event.from_dict(event_data)
