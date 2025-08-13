@@ -1,11 +1,7 @@
 {
-  "name": "Python with MongoDB",
-  "image": "mcr.microsoft.com/devcontainers/python:3.12",
-  "features": {
-    "ghcr.io/devcontainers/features/mongodb:1": {
-      "version": "latest"
-    }
-  },
+  "name": "RSVP App (Docker Compose)",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "app",
+  "workspaceFolder": "/workspaces/rsvp-priority",
   "forwardPorts": [5000],
-  "postCreateCommand": "pip install --user -r requirements.txt"
-}
+  "postCreateCommand": "echo 'Codespace is ready!'"

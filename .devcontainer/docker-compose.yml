@@ -1,0 +1,23 @@
+version: '3.8'
+services:
+  # Your Flask application service
+  app:
+    build:
+      context: ..
+      dockerfile: .devcontainer/Dockerfile
+    volumes:
+      - ..:/workspaces/rsvp-priority:cached
+    # Keep the container running
+    command: sleep infinity
+    depends_on:
+      - mongo
+
+  # The MongoDB database service
+  mongo:
+    image: mongo:latest
+    volumes:
+      - mongo-data:/data/db
+    restart: unless-stopped
+
+volumes:
+  mongo-data:
