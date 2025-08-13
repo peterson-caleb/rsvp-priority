@@ -19,9 +19,11 @@ def manage_events():
         except ValueError as e:
             flash(f'Error creating event: {str(e)}', 'error')
         return redirect(url_for('events.manage_events'))
+    
     events = event_service.get_events()
     for event in events:
         event['_id'] = str(event['_id'])
+    
     now = datetime.now(pytz.UTC)
     return render_template('events/list.html', events=events, now=now)
 
@@ -32,8 +34,10 @@ def manage_invitees(event_id):
     if not event:
         flash('Event not found', 'error')
         return redirect(url_for('events.manage_events'))
+    
     contacts = contact_service.get_contacts()
     current_invitee_ids = {invitee.get('contact_id') for invitee in event.invitees}
+    
     return render_template(
         'events/manage_invitees.html',
         event=event,
@@ -51,12 +55,14 @@ def add_invitees(event_id):
     try:
         invitees_to_add = [contact_service.get_contact(cid) for cid in selected_contact_ids]
         added_count = event_service.add_invitees(event_id, invitees_to_add)
+        
         if added_count > 0:
             flash(f'{added_count} new invitees added successfully!', 'success')
         else:
             flash('No new invitees were added (they may already be on the list).', 'info')
     except Exception as e:
         flash(f'Error adding invitees: {str(e)}', 'error')
+    
     return redirect(url_for('events.manage_invitees', event_id=event_id))
 
 @bp.route('/events/<event_id>/toggle_automation', methods=['POST'])
@@ -67,11 +73,13 @@ def toggle_automation(event_id):
         if not event:
             flash('Event not found.', 'error')
             return redirect(url_for('events.manage_events'))
+        
         new_status = 'active' if event.automation_status == 'paused' else 'paused'
         event_service.update_event(event_id, {'automation_status': new_status})
         flash(f'Event automation has been set to {new_status}.', 'success')
     except Exception as e:
         flash(f'An error occurred: {str(e)}', 'danger')
+        
     return redirect(url_for('events.manage_invitees', event_id=event_id))
 
 @bp.route('/events/<event_id>/reorder_invitees', methods=['POST'])
@@ -94,4 +102,31 @@ def delete_invitee(event_id, invitee_id):
         flash(f'Error removing invitee: {str(e)}', 'error')
     return redirect(url_for('events.manage_invitees', event_id=event_id))
 
-# ... (and any other routes you had in this file, like rsvp_page and submit_rsvp) ...
+# THIS IS THE MISSING FUNCTION
+@bp.route('/events/<event_id>/delete', methods=['POST'])
+@login_required
+def delete_event(event_id):
+    """Delete an entire event."""
+    try:
+        if event_service.delete_event(event_id):
+            flash('Event deleted successfully!', 'success')
+        else:
+            flash('Event not found.', 'error')
+    except Exception as e:
+        flash(f'Error deleting event: {str(e)}', 'error')
+    return redirect(url_for('events.manage_events'))
+
+# --- RSVP URL Routes ---
+@bp.route('/rsvp/<token>', methods=['GET'])
+def rsvp_page(token):
+    event, invitee = event_service.find_event_and_invitee_by_token(token)
+    if not event or not invitee:
+        return render_template("events/rsvp_confirmation.html", success=False, message="This invitation link is invalid or has expired.")
+    if invitee['status'] not in ['invited', 'ERROR']:
+        return render_template("events/rsvp_confirmation.html", success=True, message="Thank you, we have already received your response.")
+    return render_template("events/rsvp_page.html", event=event, invitee=invitee, token=token)
+
+@bp.route('/rsvp/submit/<token>/<response>', methods=['GET'])
+def submit_rsvp(token, response):
+    success, message = event_service.process_rsvp_from_url(token, response)
+    return render_template("events/rsvp_confirmation.html", success=success, message=message)
