@@ -3,29 +3,18 @@ services:
   - type: web
     name: the-join-us-app
     env: docker
+    dockerfilePath: ./Dockerfile # Make sure your app's Dockerfile is in the root
     plan: free
-    # The startCommand has been removed and moved to the Dockerfile
     healthCheckPath: /login
     envVars:
-      # We now build the MONGO_URI manually from the service name
-      - key: MONGO_URI
-        value: "mongodb://mongodb:27017/rsvp-system"
       - key: SECRET_KEY
         generateValue: true
-      - key: PYTHONUNBUFFERED
-        value: "1"
-      # You will still add your Twilio keys in the Render dashboard
+      # You will add your secrets in the Render dashboard
+      - key: MONGO_URI
+        sync: false
       - key: TWILIO_SID
         sync: false
       - key: TWILIO_AUTH_TOKEN
         sync: false
       - key: TWILIO_PHONE
         sync: false
-
-  # The private MongoDB database service (with no disk)
-  - type: pserv
-    name: mongodb
-    env: docker
-    dockerfilePath: ./Dockerfile.mongo
-    plan: free
-    # The disk property has been removed
