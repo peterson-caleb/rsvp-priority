@@ -1,0 +1,36 @@
+services:
+  # The Web Service (your Flask app)
+  - type: web
+    name: the-join-us-app
+    env: docker
+    plan: free
+    startCommand: "gunicorn 'app:create_app()' --bind 0.0.0.0:$PORT"
+    healthCheckPath: /login
+    envVars:
+      - key: MONGO_URI
+        fromService:
+          type: pserv
+          name: mongodb
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      # You will add your Twilio keys in the Render dashboard
+      - key: TWILIO_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_PHONE
+        sync: false
+
+  # The private MongoDB database service
+  - type: pserv
+    name: mongodb
+    env: docker
+    dockerfilePath: ./Dockerfile.mongo
+    plan: free
+    disk:
+      name: mongo-data
+      mountPath: /data/db
+      sizeGB: 1
