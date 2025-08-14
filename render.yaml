@@ -4,19 +4,17 @@ services:
     name: the-join-us-app
     env: docker
     plan: free
-    startCommand: "gunicorn 'app:create_app()' --bind 0.0.0.0:$PORT"
+    # The startCommand has been removed and moved to the Dockerfile
     healthCheckPath: /login
     envVars:
+      # We now build the MONGO_URI manually from the service name
       - key: MONGO_URI
-        fromService:
-          type: pserv
-          name: mongodb
-          property: connectionString
+        value: "mongodb://mongodb:27017/rsvp-system"
       - key: SECRET_KEY
         generateValue: true
       - key: PYTHONUNBUFFERED
         value: "1"
-      # You will add your Twilio keys in the Render dashboard
+      # You will still add your Twilio keys in the Render dashboard
       - key: TWILIO_SID
         sync: false
       - key: TWILIO_AUTH_TOKEN
@@ -24,13 +22,10 @@ services:
       - key: TWILIO_PHONE
         sync: false
 
-  # The private MongoDB database service
+  # The private MongoDB database service (with no disk)
   - type: pserv
     name: mongodb
     env: docker
     dockerfilePath: ./Dockerfile.mongo
     plan: free
-    disk:
-      name: mongo-data
-      mountPath: /data/db
-      sizeGB: 1
+    # The disk property has been removed
